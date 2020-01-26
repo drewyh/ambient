@@ -1,4 +1,4 @@
 Psychrometrics
 ==============
 
-.. automodule:: deltaq.psy
+.. automodule:: ambient.air

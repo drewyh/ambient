@@ -14,7 +14,7 @@
 
 
 from dataclasses import dataclass, field, InitVar
-from enum import auto, IntEnum
+from enum import IntEnum
 from typing import Union
 
 import numpy as np
