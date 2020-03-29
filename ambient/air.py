@@ -15,7 +15,6 @@
 
 from dataclasses import dataclass, field, InitVar
 from enum import IntEnum
-from typing import Union
 
 import numpy as np
 import scipy.optimize
@@ -58,21 +57,25 @@ class MoistAir:
     # pylint: disable=too-many-instance-attributes
 
     property_type: InitVar[PropertyType]
-    property_value: InitVar[float]
+    property_value: InitVar[np.ndarray]
 
-    drybulb: float
-    humidity_ratio: float = field(init=False, default=np.nan)
+    drybulb: np.ndarray
+    humidity_ratio: np.ndarray = field(init=False, default=np.nan)
 
     flow_rate_type: InitVar[FlowType] = FlowType.MASS
-    flow_rate_value: InitVar[float] = None
+    flow_rate_value: InitVar[np.ndarray] = None
 
-    mass_flow_rate: float = field(init=False, default=np.nan)
+    mass_flow_rate: np.ndarray = field(init=False, default=np.nan)
 
     pressure: float = STANDARD_PRESSURE
 
     def __post_init__(
-        self, property_type, property_value, flow_rate_type, flow_rate_value
-    ):
+        self,
+        property_type: PropertyType,
+        property_value: np.ndarray,
+        flow_rate_type: FlowType,
+        flow_rate_value: np.ndarray,
+    ) -> None:
         """Initialise based on arguments."""
         if property_type is PropertyType.HUMIDITY_RATIO:
             # ensure this is an array
@@ -142,7 +145,7 @@ class MoistAir:
         elif flow_rate_type is FlowType.VOLUME:
             self.mass_flow_rate = flow_rate_value / self.specific_volume
 
-    def __mul__(self, other):
+    def __mul__(self, other: "MoistAir") -> "MoistAir":
         """Multiply mass flow by float or array."""
         if isinstance(other, (float, np.array)):
             return MoistAir(
@@ -155,7 +158,7 @@ class MoistAir:
 
         raise TypeError(f"must be float or numpy array not: {type(other)}")
 
-    def __add__(self, other):
+    def __add__(self, other: "MoistAir") -> "MoistAir":
         """Add two instances based on mass and energy conservation."""
         if isinstance(other, MoistAir):
             assert self.mass_flow_rate is not None
@@ -192,21 +195,21 @@ class MoistAir:
         raise TypeError(f"must be MoistAir not: {type(other)}")
 
     @property
-    def degree_of_saturation(self):
+    def degree_of_saturation(self) -> float:
         """Calculate the degree of saturation of moist air."""
         return self.humidity_ratio / humidity_ratio_saturation(
             self.drybulb, self.pressure
         )
 
     @property
-    def relative_humidity(self):
+    def relative_humidity(self) -> float:
         """Calculate the relative humidity of moist air."""
         saturation = self.degree_of_saturation
         pressure_ws = saturation_pressure(self.drybulb)
         return saturation / (1.0 - (1.0 - saturation) * pressure_ws / self.pressure)
 
     @property
-    def specific_volume(self):
+    def specific_volume(self) -> float:
         """Calculate the specific volume of moist air.
 
         References:
@@ -220,20 +223,20 @@ class MoistAir:
         )
 
     @property
-    def specific_density(self):
+    def specific_density(self) -> float:
         """Calculate the density of moist air."""
         return (1.0 + self.humidity_ratio) / self.specific_volume
 
     @property
-    def specific_enthalpy(self):
+    def specific_enthalpy(self) -> float:
         """Calculate the specific enthalpy of moist air."""
         return _specific_enthalpy_air(self.humidity_ratio, self.drybulb)
 
     @property
-    def wetbulb(self):
+    def wetbulb(self) -> float:
         """Calculate the wet-bulb temperature of moist air."""
 
-        def root_function(wetbulb):
+        def root_function(wetbulb: np.ndarray) -> np.ndarray:
             # refer to eq. 31
             humidity_ratio_wb_sat = humidity_ratio_saturation(wetbulb, self.pressure)
             return (
@@ -246,30 +249,30 @@ class MoistAir:
         return scipy.optimize.root(root_function, self.drybulb).x
 
     @property
-    def dewpoint(self):
+    def dewpoint(self) -> float:
         """Calculate the dew-point temperature of moist air."""
         # refer to eq. 36
         partial_pressure_water_dewpoint = partial_pressure_water(
             self.humidity_ratio, self.pressure
         )
 
-        def root_function(dewpoint):
+        def root_function(dewpoint: np.ndarray) -> np.ndarray:
             return saturation_pressure(dewpoint) - partial_pressure_water_dewpoint
 
         return scipy.optimize.root(root_function, self.drybulb).x
 
 
-def celsius_to_kelvin(temperature):
+def celsius_to_kelvin(temperature: np.ndarray) -> np.ndarray:
     """Convert celsius temperature to kelvin."""
     return temperature + 273.15
 
 
-def kelvin_to_celsius(temperature):
+def kelvin_to_celsius(temperature: np.ndarray) -> np.ndarray:
     """Convert kelvin temperature to celsius."""
     return temperature - 273.15
 
 
-def standard_pressure(altitude: float):
+def standard_pressure(altitude: np.ndarray) -> np.ndarray:
     """Calculate the standard pressure from altitude.
 
     Args:
@@ -281,7 +284,7 @@ def standard_pressure(altitude: float):
     return 101325 * np.power(1.0 - 2.25577e-5 * altitude, 5.2559)
 
 
-def standard_temperature(altitude: float):
+def standard_temperature(altitude: np.ndarray) -> np.ndarray:
     """Calculate the standard temperature from altitude.
 
     Args:
@@ -293,7 +296,7 @@ def standard_temperature(altitude: float):
     return celsius_to_kelvin(15.0 - 0.0065 * altitude)
 
 
-def _saturation_pressure_water(temperature: float):
+def _saturation_pressure_water(temperature: np.ndarray) -> np.ndarray:
     # Refer to RP-1485 eq. 2.91
     const_n = [
         np.nan,
@@ -321,7 +324,7 @@ def _saturation_pressure_water(temperature: float):
     )
 
 
-def _saturation_pressure_ice(temperature: float):
+def _saturation_pressure_ice(temperature: np.ndarray) -> np.ndarray:
     # Refer to RP-1485 eq. 2.92
     const_a = [np.nan, -0.212144006e2, 0.273203819e2, -0.610598130e1]
     const_b = [np.nan, 0.333333333e-2 - 1.0, 0.120666667e1 - 1.0, 0.170333333e1 - 1.0]
@@ -335,7 +338,7 @@ def _saturation_pressure_ice(temperature: float):
     )
 
 
-def saturation_pressure(temperature: Union[float, np.array]):
+def saturation_pressure(temperature: np.ndarray) -> np.ndarray:
     """Calculate the saturation pressure based on temperature.
 
     Args:
@@ -356,18 +359,22 @@ def saturation_pressure(temperature: Union[float, np.array]):
     return pressure
 
 
-def partial_pressure_water(humidity_ratio: float, pressure: float):
+def partial_pressure_water(
+    humidity_ratio: np.ndarray, pressure: np.ndarray
+) -> np.ndarray:
     """Calculate the partial pressure of water vapour."""
     return pressure * humidity_ratio / (_MOLAR_MASS_RATIO + humidity_ratio)
 
 
-def humidity_ratio_saturation(temperature: float, pressure: float):
+def humidity_ratio_saturation(
+    temperature: np.ndarray, pressure: np.ndarray
+) -> np.ndarray:
     """Calculate the saturation humidity ratio for a given temperature and pressure."""
     pressure_ws = saturation_pressure(temperature)
     return _MOLAR_MASS_RATIO * pressure_ws / (pressure - pressure_ws)
 
 
-def _enthalpy_water_saturated_liquid(temperature: float):
+def _enthalpy_water_saturated_liquid(temperature: np.ndarray) -> np.ndarray:
     """Calculate the enthalpy of water as a saturated liquid.
 
     See also: eq. 32.
@@ -375,7 +382,7 @@ def _enthalpy_water_saturated_liquid(temperature: float):
     return 4.186 * kelvin_to_celsius(temperature)
 
 
-def _enthalpy_water_saturated_solid(temperature: float):
+def _enthalpy_water_saturated_solid(temperature: np.ndarray) -> np.ndarray:
     """Calculate the enthalpy of water as a solid (ice).
 
     See also: eq. 34.
@@ -383,7 +390,7 @@ def _enthalpy_water_saturated_solid(temperature: float):
     return -333.4 + 2.1 * kelvin_to_celsius(temperature)
 
 
-def enthalpy_water_condensed_saturated(temperature: Union[float, np.array]):
+def enthalpy_water_condensed_saturated(temperature: np.ndarray) -> np.ndarray:
     """Calculate the enthalpy of water in saturated liquid or solid form.
 
     Args:
@@ -404,7 +411,7 @@ def enthalpy_water_condensed_saturated(temperature: Union[float, np.array]):
     return enthalpy
 
 
-def enthalpy_water_vapour_saturated(temperature: Union[float, np.array]):
+def enthalpy_water_vapour_saturated(temperature: np.ndarray) -> np.ndarray:
     """Calculate the enthalpy of saturated water vapour.
 
     Args:
@@ -417,13 +424,15 @@ def enthalpy_water_vapour_saturated(temperature: Union[float, np.array]):
     return 2501 + 1.86 * temperature
 
 
-def _specific_enthalpy_dry_air(drybulb):
+def _specific_enthalpy_dry_air(drybulb: np.ndarray) -> np.ndarray:
     """Calculate the enthalpy from dry-bulb temperature."""
     drybulb = kelvin_to_celsius(drybulb)
     return 1.006 * drybulb
 
 
-def _specific_enthalpy_air(humidity_ratio, drybulb):
+def _specific_enthalpy_air(
+    humidity_ratio: np.ndarray, drybulb: np.ndarray
+) -> np.ndarray:
     """Calculate the enthalpy from humidity ratio and dry-bulb temperature."""
     drybulb = kelvin_to_celsius(drybulb)
     return 1.006 * drybulb + humidity_ratio * (2501 + 1.86 * drybulb)
