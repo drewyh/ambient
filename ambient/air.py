@@ -61,12 +61,12 @@ class MoistAir:
     property_value: InitVar[float]
 
     drybulb: float
-    humidity_ratio: float = field(init=False, default=None)
+    humidity_ratio: float = field(init=False, default=np.nan)
 
     flow_rate_type: InitVar[FlowType] = FlowType.MASS
     flow_rate_value: InitVar[float] = None
 
-    mass_flow_rate: float = field(init=False, default=None)
+    mass_flow_rate: float = field(init=False, default=np.nan)
 
     pressure: float = STANDARD_PRESSURE
 
@@ -296,7 +296,7 @@ def standard_temperature(altitude: float):
 def _saturation_pressure_water(temperature: float):
     # Refer to RP-1485 eq. 2.91
     const_n = [
-        None,
+        np.nan,
         0.11670521452767e4,
         -0.72421316703206e6,
         -0.17073846940092e2,
@@ -323,8 +323,8 @@ def _saturation_pressure_water(temperature: float):
 
 def _saturation_pressure_ice(temperature: float):
     # Refer to RP-1485 eq. 2.92
-    const_a = [None, -0.212144006e2, 0.273203819e2, -0.610598130e1]
-    const_b = [None, 0.333333333e-2 - 1.0, 0.120666667e1 - 1.0, 0.170333333e1 - 1.0]
+    const_a = [np.nan, -0.212144006e2, 0.273203819e2, -0.610598130e1]
+    const_b = [np.nan, 0.333333333e-2 - 1.0, 0.120666667e1 - 1.0, 0.170333333e1 - 1.0]
 
     theta = temperature / 273.16
 
