@@ -11,6 +11,7 @@ Welcome to ambient's documentation!
    :caption: Contents:
 
    air
+   constructions
 
 
 Indices and tables

@@ -51,6 +51,10 @@ html_theme = "alabaster"
 html_static_path = ["_static"]
 
 # Configure autodoc
-autodoc_default_options = {"members": True, "member-order": "bysource"}
+autodoc_default_options = {
+    "members": True,
+    "show-inheritance": True,
+    "member-order": "bysource",
+}
 autodoc_typehints = "none"
 autodoc_mock_imports = ["numpy", "scipy"]

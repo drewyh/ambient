@@ -100,53 +100,85 @@ def _calculate_residuals(
 
 
 @dataclass
-class Construction:
+class ConstructionBase:
+    """Construction base class."""
+
+    @property
+    def thermal_resistance(self) -> float:
+        """Return the total thermal resistance of the construction."""
+        raise NotImplementedError()
+
+    @property
+    def thermal_transmittance(self) -> float:
+        """Return the total thermal transimittance of the construction."""
+        return 1.0 / self.thermal_resistance
+
+    def calculate_heat_flux_inside(
+        self,
+        outside_temps: np.ndarray,
+        inside_temps: np.ndarray,
+        inside_heat_fluxes: np.ndarray,
+        current_index: int,
+    ) -> float:
+        """Calculated the inside heat fluxes."""
+        raise NotImplementedError()
+
+    def calculate_heat_flux_outside(
+        self,
+        outside_temps: np.ndarray,
+        inside_temps: np.ndarray,
+        outside_heat_fluxes: np.ndarray,
+        current_index: int,
+    ) -> float:
+        """Calculated the inside heat fluxes."""
+        raise NotImplementedError()
+
+
+@dataclass
+class ConstructionLayered(ConstructionBase):
     """Class for layered constructions.
 
     The order of layers is outside to inside.
     """
 
     # order of layers is outside to inside
-    thicknesses: np.array
-    conductivities: np.array
+    thicknesses: np.array  #: The thickness of all layers [m]
+    conductivities: np.array  #: The conductivities of all layers [W/m.K]
+
+    #: The resistance of all layers
+    #:
+    #: Note: np.nan where a layer is not resistance only [m^2.K/W]
     resistances: np.array
-    densities: np.array = None
+    densities: np.array = None  #: The densities of all layers [kg/m^3]
+
+    #: The specific heat capacities of all layers [J/kg.K]
     specific_heats: np.array = None
-    timestep: int = 3600
+    timestep: int = 3600  #: The time step for simulation [s]
 
     def __post_init__(self) -> None:
         """Set construction data not stored in fields."""
         complex_layer_resistances = self.thicknesses / self.conductivities
-        self._layer_resistances = np.copy(self.resistances)
-        self._layer_resistances[np.isnan(self.resistances)] = complex_layer_resistances
 
-        self._thermal_transmittance = 1.0 / np.sum(self.layer_resistances)
+        layer_resistances = np.copy(self.resistances)
+        layer_resistances[np.isnan(self.resistances)] = complex_layer_resistances
 
-        self._ctfs = None
+        self._thermal_resistance = np.sum(layer_resistances)
 
         # allow fixing the minimum and maximum order of ctfs for testing
         self._min_ctf_order = 2
         self._max_ctf_order = 6
 
-    @property
-    def layer_count(self) -> int:
-        """Return the number of layers in the construction."""
-        return len(self.resistances)
+        self._ctfs_internal = None
 
     @property
-    def layer_resistances(self) -> np.ndarray:
-        """Return the resistances of layers in the construction."""
-        return self._layer_resistances
-
-    @property
-    def thermal_transmittance(self) -> float:
+    def thermal_resistance(self) -> float:
         """Return the thermal transimittance of the construction."""
-        return self._thermal_transmittance
+        return self._thermal_resistance
 
     @property
-    def ctfs(self) -> np.ndarray:
+    def _ctfs(self) -> np.ndarray:
         """Return the conduction transfer functions."""
-        if self._ctfs is None:
+        if self._ctfs_internal is None:
             # paper notes typical orders of 3-5, however 6 may be required for heavy
             # constructions. Additionally, 1 allows resistance only (or close to)
             # constructions to be modelled.
@@ -157,9 +189,9 @@ class Construction:
                 num = np.poly1d(numerator_coeff)
                 arr.extend(self._calculate_ctf(num, den, self.timestep))
 
-            self._ctfs = np.array(arr[::2] + [arr[-1]])
+            self._ctfs_internal = np.array(arr[::2] + [arr[-1]])
 
-        return self._ctfs
+        return self._ctfs_internal
 
     def _calculate_response_matrix(self, frequencies: np.ndarray) -> np.ndarray:
         invsqrt_layer_diffusivity = np.sqrt(
@@ -338,7 +370,7 @@ class Construction:
 
     @property
     def _timeseries_length(self) -> int:
-        return self.ctfs.shape[-1]  # pylint: disable=unsubscriptable-object
+        return self._ctfs.shape[-1]  # pylint: disable=unsubscriptable-object
 
     def calculate_heat_flux_inside(
         self,
@@ -347,7 +379,7 @@ class Construction:
         inside_heat_fluxes: np.ndarray,
         current_index: int,
     ) -> float:
-        """Calculated the inside heat fluxes."""
+        """Calculate the inside heat flux."""
         # determine the array values
         take = range(current_index - self._timeseries_length + 1, current_index + 1)
         outside_temps = outside_temps[take]
@@ -356,9 +388,9 @@ class Construction:
 
         # from eq. 34
         qi_new = (
-            np.sum(self.ctfs[1] * outside_temps)
-            - np.sum(self.ctfs[3][:-1] * inside_heat_fluxes)
-            - np.sum(self.ctfs[2] * inside_temps)
+            np.sum(self._ctfs[1] * outside_temps)
+            - np.sum(self._ctfs[3][:-1] * inside_heat_fluxes)
+            - np.sum(self._ctfs[2] * inside_temps)
         )
 
         return qi_new
@@ -370,7 +402,7 @@ class Construction:
         outside_heat_fluxes: np.ndarray,
         current_index: int,
     ) -> float:
-        """Calculated the inside heat fluxes."""
+        """Calculate the inside heat flux."""
         # determine the array values
         take = range(current_index - self._timeseries_length + 1, current_index + 1)
         outside_temps = outside_temps[take]
@@ -379,9 +411,45 @@ class Construction:
 
         # from eq. 34
         qo_new = (
-            -np.sum(self.ctfs[0] * outside_temps)
-            - np.sum(self.ctfs[3][:-1] * outside_heat_fluxes)
-            + np.sum(self.ctfs[2] * inside_temps)
+            -np.sum(self._ctfs[0] * outside_temps)
+            - np.sum(self._ctfs[3][:-1] * outside_heat_fluxes)
+            + np.sum(self._ctfs[2] * inside_temps)
         )
 
         return qo_new
+
+
+@dataclass
+class ConstructionResistanceOnly(ConstructionBase):
+    """Class for resistance only constructions."""
+
+    resistance: float  #: The total thermal resistance of the construction
+
+    @property
+    def thermal_resistance(self) -> float:
+        """Return the total thermal resistance of the construction."""
+        return self.resistance
+
+    def calculate_heat_flux_inside(
+        self,
+        outside_temps: np.ndarray,
+        inside_temps: np.ndarray,
+        inside_heat_fluxes: np.ndarray,
+        current_index: int,
+    ) -> float:
+        """Calculate the inside heat flux."""
+        return self.thermal_transmittance * (
+            outside_temps[current_index] - inside_temps[current_index]
+        )
+
+    def calculate_heat_flux_outside(
+        self,
+        outside_temps: np.ndarray,
+        inside_temps: np.ndarray,
+        outside_heat_fluxes: np.ndarray,
+        current_index: int,
+    ) -> float:
+        """Calculate the inside heat flux."""
+        return -self.calculate_heat_flux_inside(
+            outside_temps, inside_temps, outside_heat_fluxes, current_index
+        )

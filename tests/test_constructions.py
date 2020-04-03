@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from ambient.construction import Construction
+from ambient.construction import ConstructionLayered, ConstructionResistanceOnly
 
 CTF_EPS = 0.02
 HEAT_TRANSFER_EPS = 0.007
@@ -49,7 +49,7 @@ def test_heat_transfer_wang_wall_iii():
         ISSN 0360-1323,
         https://doi.org/10.1016/S0360-1323(02)00024-0.
     """
-    con = Construction(
+    con = ConstructionLayered(
         thicknesses=np.array([25.39, 101.59, 25.30, 19.05]) / 1000,
         conductivities=np.array([0.6924, 1.7310, 0.0433, 0.7270]),
         densities=np.array([1858, 2243, 32, 1602]),
@@ -106,7 +106,7 @@ def test_ctfs_wang_wall_iii():
         ISSN 0360-1323,
         https://doi.org/10.1016/S0360-1323(02)00024-0.
     """
-    con = Construction(
+    con = ConstructionLayered(
         thicknesses=np.array([25.39, 101.59, 25.30, 19.05]) / 1000,
         conductivities=np.array([0.6924, 1.7310, 0.0433, 0.7270]),
         densities=np.array([1858, 2243, 32, 1602]),
@@ -127,11 +127,11 @@ def test_ctfs_wang_wall_iii():
     # check the values of the bk and dk ctfs
     # note: only these values are check as we use the improved ctf method
     # so only the bk and dk values are expected to match
-    assert np.allclose(np.round(con.ctfs[1], 6), ctf_b, rtol=CTF_EPS, atol=0.0)
-    assert np.allclose(np.round(con.ctfs[3], 6), ctf_d, rtol=CTF_EPS, atol=0.0)
+    assert np.allclose(np.round(con._ctfs[1], 6), ctf_b, rtol=CTF_EPS, atol=0.0)
+    assert np.allclose(np.round(con._ctfs[3], 6), ctf_d, rtol=CTF_EPS, atol=0.0)
 
     # check all the ctf sums are close to K
-    assert np.allclose(_calculate_sums(con.ctfs), con.thermal_transmittance)
+    assert np.allclose(_calculate_sums(con._ctfs), con.thermal_transmittance)
 
 
 def test_heat_transfer_wang_wall_iv():
@@ -147,7 +147,7 @@ def test_heat_transfer_wang_wall_iv():
         ISSN 0360-1323,
         https://doi.org/10.1016/S0360-1323(02)00024-0.
     """
-    con = Construction(
+    con = ConstructionLayered(
         thicknesses=np.array([105, 100]) / 1000,
         conductivities=np.array([0.840, 1.630]),
         densities=np.array([1700, 2300]),
@@ -181,8 +181,8 @@ def test_heat_transfer_wang_wall_iv():
     # check the values of the bk and dk ctfs
     # note: only these values are check as we use the improved ctf method
     # so only the bk and dk values are expected to match
-    assert np.allclose(np.round(con.ctfs[1], 6), ctf_b, rtol=CTF_EPS, atol=0.0)
-    assert np.allclose(np.round(con.ctfs[3], 6), ctf_d, rtol=CTF_EPS, atol=0.0)
+    assert np.allclose(np.round(con._ctfs[1], 6), ctf_b, rtol=CTF_EPS, atol=0.0)
+    assert np.allclose(np.round(con._ctfs[3], 6), ctf_d, rtol=CTF_EPS, atol=0.0)
 
     # initialise values
     qe = np.zeros(24)
@@ -206,7 +206,7 @@ def test_heat_transfer_wang_wall_iv():
     )
 
     # check all the ctf sums are close to K
-    assert np.allclose(_calculate_sums(con.ctfs), con.thermal_transmittance)
+    assert np.allclose(_calculate_sums(con._ctfs), con.thermal_transmittance)
 
     # check thermal transmittance value from paper
     assert np.around(con.thermal_transmittance, 5) == 1.83033
@@ -214,7 +214,7 @@ def test_heat_transfer_wang_wall_iv():
 
 def test_construction_resistance_low():
     """Calculate properties of a low capacitance wall."""
-    con = Construction(
+    con = ConstructionLayered(
         thicknesses=np.array([1]) / 1000,
         conductivities=np.array([30]),
         densities=np.array([3950]),
@@ -238,12 +238,12 @@ def test_construction_resistance_low():
     )
 
     # check all the ctf sums are close to K
-    assert np.allclose(_calculate_sums(con.ctfs), con.thermal_transmittance)
+    assert np.allclose(_calculate_sums(con._ctfs), con.thermal_transmittance)
 
 
 def test_heat_transfer_chen_wall_i():
     """Wall I from Chen and Wang (2001) Appl. Math. Modelling 25."""
-    con = Construction(
+    con = ConstructionLayered(
         thicknesses=np.array([240, 20]) / 1000,
         conductivities=np.array([0.81, 0.70]),
         densities=np.array([1800, 1600]),
@@ -284,4 +284,30 @@ def test_heat_transfer_chen_wall_i():
     )
 
     # check all the ctf sums are close to K
-    assert np.allclose(_calculate_sums(con.ctfs), con.thermal_transmittance)
+    assert np.allclose(_calculate_sums(con._ctfs), con.thermal_transmittance)
+
+
+def test_heat_transfer_resistance_only():
+    """Wall I from Chen and Wang (2001) Appl. Math. Modelling 25."""
+    con = ConstructionResistanceOnly(resistance=0.5)
+
+    # initialise values
+    qe = np.zeros(24)
+    qo = np.zeros(24)
+    temp_in = np.full_like(SOL_AIR, 273.15 + 24)
+    temp_out = np.full_like(SOL_AIR, 273.15 + 26)
+
+    # since there is no time history component, one iteration is sufficient
+    iterate_heat_transfer(con, temp_in, temp_out, qe, qo, iterations=1)
+
+    # check the heat transfer into the room
+    assert np.allclose(qe, 4.0, rtol=0.0, atol=0.0)
+
+    # now do further iterations to check heat transfer convergence
+    iterate_heat_transfer(con, temp_in, temp_out, qe, qo, iterations=96)
+
+    # check inside and outside heat transfer
+    assert np.allclose(np.sum(qe) + np.sum(qo), 0.0, rtol=0.0, atol=0.0)
+
+    # check all the ctf sums are close to K
+    assert np.allclose(con.thermal_transmittance, 2.0)
