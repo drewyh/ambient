@@ -12,6 +12,8 @@ Welcome to ambient's documentation!
 
    air
    constructions
+   solar
+   time
 
 
 Indices and tables

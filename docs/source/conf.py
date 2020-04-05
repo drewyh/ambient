@@ -57,4 +57,3 @@ autodoc_default_options = {
     "member-order": "bysource",
 }
 autodoc_typehints = "none"
-autodoc_mock_imports = ["numpy", "scipy"]
