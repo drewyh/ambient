@@ -4,3 +4,10 @@ python:
   - "3.8"
 install: pip install tox-travis
 script: tox
+deploy:
+  provider: pypi
+  on:
+    tags: true
+  skip_existing: true
+  password:
+    secure: GBNvWinfKJZ75vlJ79M2aqT0zlXCgO8V03Z496yomwVSZw+/MI5WqFZ3Hxk9j4txFe191e8FH5qjh9lHP8PpRZ8naabNxzoOrLWZ5I/cduuNq8UQLbpPqH7A1Zm9ej1Wkx1D41ZwV6/IHVH5qE5x8iK3mfgmqUvdIyZf8c1+8DrJHOnzoYHSl8R8eQmU2geCZJaKILx7SKHmBaZxWZOJ08igyAfDF4yIKPhK5fFc2ht5DTYHMHnlB1h07kkdMK0e7i14wMFn6/vUp1xWQR/IkzN07/8gy6oI260WJy1ulUmDTHoG4cLTgangYwrEhA0dZ81FqnRSBV4rvh06CHr3SSmZlumVPHXagdsMPkbnMrl0nI1pqxckuhM6a8EljKgYyVQDIXS0LbkL15UJgbxC28DQ4ytnl/ngA1V6Ma1yJPr2YgRe2z5JDltT7UOmU2BH9yvZeXHDm0X+blufLtAnqpY7s+fyRIwGo5JDUojIYmG/Aeosz8HS2yI/RqHJ9ICeBe7tflzCpR3bZb9iud3Qk7/D2bcS4c6R/1XvrRtP5Il/lg5OWGlNFXBdUSfPjS6hc5xedtruVxwvtt50jjMYT7um0paPb70fqrgBq1xCh+X+9GLx+l9uvUrhKaIde204MU16d34hQXpKahn70SpGSNfWSJMpupKJncJ6UnsvxSA=
