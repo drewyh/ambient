@@ -12,6 +12,8 @@ Welcome to ambient's documentation!
 
    air
    constructions
+   materials
+   material_data
    solar
    time
 

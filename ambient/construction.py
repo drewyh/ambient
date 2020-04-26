@@ -9,11 +9,13 @@
 from collections import defaultdict
 from dataclasses import dataclass
 from functools import reduce
-from typing import List, Tuple
+from typing import Dict, List, Tuple, Union
 
 import numpy as np
 
 from numpy.polynomial.polynomial import polyzero, polyone
+
+from ambient.material import Material, MaterialResistanceOnly
 
 _EPS = 1.0e-9
 
@@ -141,34 +143,23 @@ class ConstructionLayered(ConstructionBase):
     The order of layers is outside to inside.
     """
 
-    # order of layers is outside to inside
-    thicknesses: np.array  #: The thickness of all layers [m]
-    conductivities: np.array  #: The conductivities of all layers [W/m.K]
-
-    #: The resistance of all layers
-    #:
-    #: Note: np.nan where a layer is not resistance only [m^2.K/W]
-    resistances: np.array
-    densities: np.array = None  #: The densities of all layers [kg/m^3]
-
-    #: The specific heat capacities of all layers [J/kg.K]
-    specific_heats: np.array = None
+    materials: List[Union[Material, MaterialResistanceOnly]]
     timestep: int = 3600  #: The time step for simulation [s]
 
     def __post_init__(self) -> None:
         """Set construction data not stored in fields."""
-        complex_layer_resistances = self.thicknesses / self.conductivities
-
-        layer_resistances = np.copy(self.resistances)
-        layer_resistances[np.isnan(self.resistances)] = complex_layer_resistances
-
-        self._thermal_resistance = np.sum(layer_resistances)
+        self._thermal_resistance = np.sum(
+            np.fromiter((m.thermal_resistance for m in self.materials), dtype=np.float)
+        )
 
         # allow fixing the minimum and maximum order of ctfs for testing
-        self._min_ctf_order = 2
+        self._min_ctf_order = 1
         self._max_ctf_order = 6
 
         self._ctfs_internal = None
+        self._is_resistance_only = all(
+            isinstance(m, MaterialResistanceOnly) for m in self.materials
+        )
 
     @property
     def thermal_resistance(self) -> float:
@@ -194,44 +185,9 @@ class ConstructionLayered(ConstructionBase):
         return self._ctfs_internal
 
     def _calculate_response_matrix(self, frequencies: np.ndarray) -> np.ndarray:
-        invsqrt_layer_diffusivity = np.sqrt(
-            self.densities * self.specific_heats / self.conductivities
-        )
-
-        layer_resistance = self.thicknesses / self.conductivities
-
-        # common args for sinh/cosh
-        value_grid = np.outer(
-            self.thicknesses * invsqrt_layer_diffusivity, np.sqrt(frequencies * 1.0j)
-        )
-
-        # precompute sinh/cosh value
-        sinh = np.sinh(value_grid)
-        cosh = np.cosh(value_grid)
-
-        # set resistance only layers
-        b_component = np.repeat(
-            self.resistances[:, np.newaxis], len(frequencies), axis=1
-        ).astype(np.complex)
-
-        a_component = np.ones_like(b_component, dtype=np.complex)
-        d_component = np.ones_like(b_component, dtype=np.complex)
-        c_component = np.zeros_like(b_component, dtype=np.complex)
-
-        complex_layers = np.isnan(self.resistances)
-
-        # matrix components
-        a_component[complex_layers, :] = cosh
-        d_component[complex_layers, :] = cosh
-        b_component[complex_layers, :] = (
-            layer_resistance[:, np.newaxis] * sinh / value_grid
-        )
-        c_component[complex_layers, :] = (
-            value_grid * sinh / layer_resistance[:, np.newaxis]
-        )
-
-        layer_matrices = np.dstack((a_component, b_component, c_component, d_component))
-        layer_matrices = layer_matrices.reshape(layer_matrices.shape[:-1] + (2, 2))
+        layer_matrices = [
+            m.calculate_response_matrices(frequencies) for m in self.materials
+        ]
 
         # calculate the product over all layers
         ms_matrix = reduce(np.matmul, layer_matrices)
@@ -246,7 +202,7 @@ class ConstructionLayered(ConstructionBase):
 
         # calculate the best fit for approximation
         coeff_map = defaultdict(list)
-        value_map = defaultdict(float)
+        value_map: Dict = defaultdict(float)
         for numerator_order in range(self._min_ctf_order, self._max_ctf_order + 1):
             for denominator_order in range(numerator_order, self._max_ctf_order + 1):
                 key = (numerator_order, denominator_order)
@@ -263,11 +219,15 @@ class ConstructionLayered(ConstructionBase):
                     )
                 except np.linalg.LinAlgError:
                     # catch the case of a singular matrix solution
-                    value_map[key] = np.inf
                     continue
 
                 # calculate the value of the denominator at frequences
                 denom_values = np.polyval(coeffs[3], frequencies)
+
+                # we can't except blow up of the solution
+                # XXX: since we need roots elsewhere it may be better to return them
+                if np.any(np.real(np.roots(coeffs[3])) >= 0.0):
+                    continue
 
                 # calculate the diff with the exact
                 diff = (
@@ -334,7 +294,7 @@ class ConstructionLayered(ConstructionBase):
         for idx, delta_i in enumerate(delta):
             mask = np.ones_like(roots, dtype=bool)
             mask[idx] = False
-            partial_numerator_sum += delta_i * reduce(np.convolve, coeffs[mask])
+            partial_numerator_sum += delta_i * reduce(np.convolve, coeffs[mask], 1.0)
 
         # XXX: delta is complex for some constructions, not sure why
         assert np.all(
@@ -380,6 +340,11 @@ class ConstructionLayered(ConstructionBase):
         current_index: int,
     ) -> float:
         """Calculate the inside heat flux."""
+        # short circuit for resistance only constructions
+        if self._is_resistance_only:
+            return self.thermal_transmittance * (
+                outside_temps[current_index] - inside_temps[current_index]
+            )
         # determine the array values
         take = range(current_index - self._timeseries_length + 1, current_index + 1)
         outside_temps = outside_temps[take]
@@ -403,6 +368,11 @@ class ConstructionLayered(ConstructionBase):
         current_index: int,
     ) -> float:
         """Calculate the inside heat flux."""
+        # short circuit for resistance only constructions
+        if self._is_resistance_only:
+            return self.thermal_transmittance * (
+                inside_temps[current_index] - outside_temps[current_index]
+            )
         # determine the array values
         take = range(current_index - self._timeseries_length + 1, current_index + 1)
         outside_temps = outside_temps[take]
@@ -417,39 +387,3 @@ class ConstructionLayered(ConstructionBase):
         )
 
         return qo_new
-
-
-@dataclass
-class ConstructionResistanceOnly(ConstructionBase):
-    """Class for resistance only constructions."""
-
-    resistance: float  #: The total thermal resistance of the construction
-
-    @property
-    def thermal_resistance(self) -> float:
-        """Return the total thermal resistance of the construction."""
-        return self.resistance
-
-    def calculate_heat_flux_inside(
-        self,
-        outside_temps: np.ndarray,
-        inside_temps: np.ndarray,
-        inside_heat_fluxes: np.ndarray,
-        current_index: int,
-    ) -> float:
-        """Calculate the inside heat flux."""
-        return self.thermal_transmittance * (
-            outside_temps[current_index] - inside_temps[current_index]
-        )
-
-    def calculate_heat_flux_outside(
-        self,
-        outside_temps: np.ndarray,
-        inside_temps: np.ndarray,
-        outside_heat_fluxes: np.ndarray,
-        current_index: int,
-    ) -> float:
-        """Calculate the inside heat flux."""
-        return -self.calculate_heat_flux_inside(
-            outside_temps, inside_temps, outside_heat_fluxes, current_index
-        )

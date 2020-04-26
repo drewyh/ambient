@@ -1,0 +1,4 @@
+Materials
+=========
+
+.. automodule:: ambient.material
