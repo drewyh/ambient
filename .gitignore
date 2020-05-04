@@ -42,6 +42,7 @@ docs/build/
 
 # Environments
 venv/
+.ipynb_checkpoints/
 
 # mypy
 .mypy_cache/
