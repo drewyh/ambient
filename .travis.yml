@@ -12,6 +12,8 @@ deploy:
   provider: pypi
   on:
     tags: true
+    branch: master
+    condition: $TRAVIS_PYTHON_VERSION == 3.8
   skip_existing: true
   username: "__token__"
   password:

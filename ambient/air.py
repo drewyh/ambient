@@ -147,7 +147,7 @@ class MoistAir:
 
     def __mul__(self, other: "MoistAir") -> "MoistAir":
         """Multiply mass flow by float or array."""
-        if isinstance(other, (float, np.array)):
+        if isinstance(other, (float, np.ndarray)):
             return MoistAir(
                 property_type=PropertyType.HUMIDITY_RATIO,
                 property_value=self.humidity_ratio,
