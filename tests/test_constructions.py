@@ -54,12 +54,12 @@ def test_heat_transfer_wang_wall_iii():
     """
     con = ConstructionLayered(
         materials=[
-            MaterialResistanceOnly(0.0586),
-            mats.Stucco(25.39 / 1000),
-            mats.HighDensityConcrete(101.59 / 1000),
-            mats.Insulation(25.30 / 1000),
-            mats.Plaster(19.05 / 1000),
-            MaterialResistanceOnly(0.1206),
+            MaterialResistanceOnly(thermal_resistance=0.0586),
+            mats.Stucco(thickness=25.39 / 1000),
+            mats.HighDensityConcrete(thickness=101.59 / 1000),
+            mats.Insulation(thickness=25.30 / 1000),
+            mats.Plaster(thickness=19.05 / 1000),
+            MaterialResistanceOnly(thermal_resistance=0.1206),
         ],
         timestep=3600,
     )
@@ -112,12 +112,12 @@ def test_ctfs_wang_wall_iii():
     """
     con = ConstructionLayered(
         materials=[
-            MaterialResistanceOnly(0.0586),
-            mats.Stucco(25.39 / 1000),
-            mats.HighDensityConcrete(101.59 / 1000),
-            mats.Insulation(25.30 / 1000),
-            mats.Plaster(19.05 / 1000),
-            MaterialResistanceOnly(0.1206),
+            MaterialResistanceOnly(thermal_resistance=0.0586),
+            mats.Stucco(thickness=25.39 / 1000),
+            mats.HighDensityConcrete(thickness=101.59 / 1000),
+            mats.Insulation(thickness=25.30 / 1000),
+            mats.Plaster(thickness=19.05 / 1000),
+            MaterialResistanceOnly(thermal_resistance=0.1206),
         ],
         timestep=3600,
     )
@@ -154,11 +154,11 @@ def test_heat_transfer_wang_wall_iv():
     """
     con = ConstructionLayered(
         materials=[
-            MaterialResistanceOnly(0.060),
-            mats.Brickwork(105 / 1000),
-            MaterialResistanceOnly(0.180),
-            mats.HeavyweightConcrete(100 / 1000),
-            MaterialResistanceOnly(0.120),
+            MaterialResistanceOnly(thermal_resistance=0.060),
+            mats.Brickwork(thickness=105 / 1000),
+            MaterialResistanceOnly(thermal_resistance=0.180),
+            mats.HeavyweightConcrete(thickness=100 / 1000),
+            MaterialResistanceOnly(thermal_resistance=0.120),
         ],
         timestep=3600,
     )
@@ -223,9 +223,9 @@ def test_construction_resistance_low():
     """Calculate properties of a low capacitance wall."""
     con = ConstructionLayered(
         materials=[
-            MaterialResistanceOnly(0.060),
-            mats.Aluminium(1 / 1000),
-            MaterialResistanceOnly(0.020),
+            MaterialResistanceOnly(thermal_resistance=0.060),
+            mats.Aluminium(thickness=1 / 1000),
+            MaterialResistanceOnly(thermal_resistance=0.020),
         ],
         timestep=3600,
     )
@@ -252,10 +252,10 @@ def test_heat_transfer_chen_wall_i():
     """Wall I from Chen and Wang (2001) Appl. Math. Modelling 25."""
     con = ConstructionLayered(
         materials=[
-            MaterialResistanceOnly(0.0546),
-            mats.Brickwork2(240 / 1000),
-            mats.LimePlaster(20 / 1000),
-            MaterialResistanceOnly(0.1149),
+            MaterialResistanceOnly(thermal_resistance=0.0546),
+            mats.Brickwork2(thickness=240 / 1000),
+            mats.LimePlaster(thickness=20 / 1000),
+            MaterialResistanceOnly(thermal_resistance=0.1149),
         ],
         timestep=3600,
     )
@@ -297,7 +297,9 @@ def test_heat_transfer_chen_wall_i():
 
 def test_heat_transfer_resistance_only():
     """Wall I from Chen and Wang (2001) Appl. Math. Modelling 25."""
-    con = ConstructionLayered(materials=[MaterialResistanceOnly(0.5)], timestep=3600)
+    con = ConstructionLayered(
+        materials=[MaterialResistanceOnly(thermal_resistance=0.5)], timestep=3600
+    )
 
     # initialise values
     qe = np.zeros(24)

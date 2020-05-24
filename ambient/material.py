@@ -1,30 +1,33 @@
 """Material property classes."""
 
+from abc import abstractmethod
 from dataclasses import dataclass
 from typing import ClassVar
 
 import numpy as np
 
+from ambient.core import BaseElement
 
-@dataclass
-class MaterialBase:
+
+@dataclass  # type: ignore
+class MaterialBase(BaseElement):
     """Base material related information."""
 
     # XXX: subclasses must provide thermal_resistance attribute
 
+    @abstractmethod
     def calculate_response_matrices(self, frequencies: np.ndarray) -> np.ndarray:
         """Calculate the frequency response for the material."""
-        raise NotImplementedError()
 
 
 @dataclass
 class Material(MaterialBase):
     """Material related information."""
 
-    conductivity: ClassVar[float]  #: Material conductivity [W/m.K]
-    density: ClassVar[float]  #: Material density [kg/m^3]
-    specific_heat: ClassVar[float]  #: Material specific heat capacity [J/kg.K]
-    thickness: float  #: Material thickness [m]
+    conductivity: ClassVar[float] = np.inf  #: Material conductivity [W/m.K]
+    density: ClassVar[float] = np.inf  #: Material density [kg/m^3]
+    specific_heat: ClassVar[float] = np.inf  #: Material specific heat capacity [J/kg.K]
+    thickness: float = np.inf  #: Material thickness [m]
 
     def __post_init__(self) -> None:
         """Set the thermal resistance of the material [m^2.K/W]."""
@@ -59,7 +62,7 @@ class Material(MaterialBase):
 class MaterialResistanceOnly(MaterialBase):
     """Resistance only material related information."""
 
-    thermal_resistance: float  #: Material resistance [m^2.K/W]
+    thermal_resistance: float = np.inf  #: Material resistance [m^2.K/W]
 
     def calculate_response_matrices(self, frequencies: np.ndarray) -> np.ndarray:
         """Calculate the frequency response for the material."""

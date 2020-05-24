@@ -1,39 +1,61 @@
 """Calculate solar data."""
 
-from dataclasses import dataclass
+from abc import abstractmethod
+from dataclasses import dataclass, field
+from typing import Optional
 
 import numpy as np
 
+from ambient.core import BaseElement
 from ambient.time import TimePeriodBase
 
 
 @dataclass
-class Location:
+class Location(BaseElement):
     """Location related information."""
 
-    latitude: float  #: location latitude [degrees]
-    longitude: float  #: location longitude [degrees]
-    timezone: float  #: time difference from UTC [hours]
+    latitude: float = np.inf  #: location latitude [degrees]
+    longitude: float = np.inf  #: location longitude [degrees]
+    timezone: float = np.inf  #: time difference from UTC [hours]
     elevation: float = 0.0  #: elevation above sealevel [m]
 
+    def __post_init__(self) -> None:
+        """Do some checks on input."""
+        assert self.latitude != np.inf
+        assert self.longitude != np.inf
+        assert self.timezone != np.inf
 
-@dataclass
-class SolarBase:
+
+@dataclass  # type: ignore
+class SolarBase(BaseElement):
     """Solar related calculation base class."""
 
-    location: Location  #: Location for the solar calculations
-    timeperiod: TimePeriodBase  #: Time period for solar calculations
+    location: Optional[Location] = None  #: Location for the solar calculations
+    timeperiod: Optional[TimePeriodBase] = None  #: Time period for solar calculations
 
-    @property
-    def _extraterrestrial_solar(self) -> np.ndarray:
+    def __post_init__(self) -> None:
+        """Do some checks on input."""
+        assert self.location is not None
+        assert self.timeperiod is not None
+
+        self._extraterrestrial_solar = self._init_extraterrestrial_solar()
+        self._equation_of_time = self._init_equation_of_time()
+        self._declination = self._init_declination()
+        self._apparent_solar_time = self._init_apparent_solar_time()
+        self._hour_angle = self._init_hour_angle()
+        self._solar_altitude = self._init_solar_altitude()
+        self._solar_azimuth = self._init_solar_azimuth()
+
+    def _init_extraterrestrial_solar(self) -> np.ndarray:
+        assert self.timeperiod is not None
         # the extraterrestrial solar irradiation from eq. D.15
         # note: days are 1 based for calculations
         return 1367 * (
             1.0 + 0.033 * np.cos(2.0 * np.pi * (self.timeperiod.days - 2) / 365)
         )
 
-    @property
-    def _equation_of_time(self) -> np.ndarray:
+    def _init_equation_of_time(self) -> np.ndarray:
+        assert self.timeperiod is not None
         # note: days are 1 based for calculations
         gamma = 2 * np.pi * self.timeperiod.days / 365
         return 2.2918 * (
@@ -44,31 +66,31 @@ class SolarBase:
             - 4.089 * np.sin(2 * gamma)
         )
 
-    @property
-    def _declination(self) -> np.ndarray:
+    def _init_declination(self) -> np.ndarray:
+        assert self.timeperiod is not None
         # LCAM uses a simplified equation for declination
         # note: days are 1 based for calculations
         return np.radians(
             23.45 * np.sin(2 * np.pi * (self.timeperiod.days + 285) / 365)
         )
 
-    @property
-    def _apparent_solar_time(self) -> np.ndarray:
+    def _init_apparent_solar_time(self) -> np.ndarray:
+        assert self.timeperiod is not None
+        assert self.location is not None
         standard_meridian = np.radians(self.location.timezone * 15)
         longitude = np.radians(self.location.longitude)
 
         return (
-            self.timeperiod.hours[np.newaxis, :]
+            self.timeperiod.times_in_hours[np.newaxis, :]
             + self._equation_of_time[:, np.newaxis] / 60.0
             + (standard_meridian - longitude) / 15.0
         )
 
-    @property
-    def _hour_angle(self) -> np.ndarray:
+    def _init_hour_angle(self) -> np.ndarray:
         return np.radians(15.0 * (self._apparent_solar_time - 12.0))
 
-    @property
-    def _solar_altitude(self) -> np.ndarray:
+    def _init_solar_altitude(self) -> np.ndarray:
+        assert self.location is not None
         latitude = np.radians(self.location.latitude)
         declination = self._declination
 
@@ -82,8 +104,8 @@ class SolarBase:
 
         return solar_altitude
 
-    @property
-    def _solar_azimuth(self) -> np.ndarray:
+    def _init_solar_azimuth(self) -> np.ndarray:
+        assert self.location is not None
         latitude = np.radians(self.location.latitude)
         declination = self._declination
         hour_angle = self._hour_angle
@@ -103,14 +125,14 @@ class SolarBase:
         return solar_azimuth
 
     @property
+    @abstractmethod
     def diffuse_horizontal_irradiance_all(self) -> np.ndarray:
         """Return the diffuse horizontal irrandiance for all timesteps."""
-        raise NotImplementedError()
 
     @property
+    @abstractmethod
     def beam_normal_irradiance_all(self) -> np.ndarray:
         """Return the beam normal irrandiance for all timesteps."""
-        raise NotImplementedError()
 
     def calculate_incident_diffuse_radiation(
         self, surface_azimuth: np.ndarray, surface_tilt: np.ndarray
@@ -153,11 +175,20 @@ class SolarBase:
 class SolarDesignDay(SolarBase):
     """Solar related calculation design day."""
 
-    tau_b: np.array  #: clear sky beam optical depth on the 21st of each month []
-    tau_d: np.array  #: clear sky diffuse optical depth on the 21st of each month []
+    tau_b: np.ndarray = field(
+        default_factory=np.array
+    )  #: clear sky beam optical depth on the 21st of each month []
+    tau_d: np.ndarray = field(
+        default_factory=np.array
+    )  #: clear sky diffuse optical depth on the 21st of each month []
 
     def __post_init__(self) -> None:
         """Pre-compute data for annual calculations."""
+        super().__post_init__()
+
+        assert self.location is not None
+        assert self.timeperiod is not None
+
         # calculate the beam solar
         m_const = 1.0 / (
             np.sin(self._solar_altitude)

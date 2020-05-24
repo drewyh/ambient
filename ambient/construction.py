@@ -6,16 +6,18 @@
 # Wang and Chen
 # Building and Environment 38 (2003)
 
+from abc import abstractmethod
 from collections import defaultdict
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from functools import reduce
-from typing import Dict, List, Tuple, Union
+from typing import Dict, List, Tuple
 
 import numpy as np
 
 from numpy.polynomial.polynomial import polyzero, polyone
 
-from ambient.material import Material, MaterialResistanceOnly
+from ambient.core import BaseElement
+from ambient.material import MaterialBase, MaterialResistanceOnly
 
 _EPS = 1.0e-9
 
@@ -101,20 +103,21 @@ def _calculate_residuals(
     return delta
 
 
-@dataclass
-class ConstructionBase:
+@dataclass  # type: ignore
+class ConstructionBase(BaseElement):
     """Construction base class."""
 
     @property
+    @abstractmethod
     def thermal_resistance(self) -> float:
         """Return the total thermal resistance of the construction."""
-        raise NotImplementedError()
 
     @property
     def thermal_transmittance(self) -> float:
         """Return the total thermal transimittance of the construction."""
         return 1.0 / self.thermal_resistance
 
+    @abstractmethod
     def calculate_heat_flux_inside(
         self,
         outside_temps: np.ndarray,
@@ -123,8 +126,8 @@ class ConstructionBase:
         current_index: int,
     ) -> float:
         """Calculated the inside heat fluxes."""
-        raise NotImplementedError()
 
+    @abstractmethod
     def calculate_heat_flux_outside(
         self,
         outside_temps: np.ndarray,
@@ -133,7 +136,6 @@ class ConstructionBase:
         current_index: int,
     ) -> float:
         """Calculated the inside heat fluxes."""
-        raise NotImplementedError()
 
 
 @dataclass
@@ -143,28 +145,24 @@ class ConstructionLayered(ConstructionBase):
     The order of layers is outside to inside.
     """
 
-    materials: List[Union[Material, MaterialResistanceOnly]]
+    materials: List[MaterialBase] = field(default_factory=list)
     timestep: int = 3600  #: The time step for simulation [s]
 
     def __post_init__(self) -> None:
         """Set construction data not stored in fields."""
-        self._thermal_resistance = np.sum(
-            np.fromiter((m.thermal_resistance for m in self.materials), dtype=np.float)
-        )
-
         # allow fixing the minimum and maximum order of ctfs for testing
         self._min_ctf_order = 1
         self._max_ctf_order = 6
-
         self._ctfs_internal = None
-        self._is_resistance_only = all(
-            isinstance(m, MaterialResistanceOnly) for m in self.materials
-        )
 
     @property
     def thermal_resistance(self) -> float:
         """Return the thermal transimittance of the construction."""
-        return self._thermal_resistance
+        return sum(m.thermal_resistance or 0.0 for m in self.materials)
+
+    @property
+    def _is_resistance_only(self) -> bool:
+        return all(isinstance(m, MaterialResistanceOnly) for m in self.materials)
 
     @property
     def _ctfs(self) -> np.ndarray:
