@@ -21,7 +21,7 @@ Features
 - Solar conditions (including design day calculations)
 - Psychrometrics of moist air
 
-Simulations can be read from, and written to, JSON format for persistence.
+Simulations can be read from, and written to, JSON format.
 
 Installation
 ------------
